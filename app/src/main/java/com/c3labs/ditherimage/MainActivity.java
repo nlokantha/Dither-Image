@@ -7,6 +7,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.util.Log;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.Toast;
@@ -23,6 +24,7 @@ import java.util.Locale;
 public class MainActivity extends AppCompatActivity {
 
     private static final int PICK_IMAGE = 1;
+    private static final String TAG = "tag";
     private ImageView originalImageView, ditheredImageView;
     private Button selectImageBtn, saveImageBtn, saveHexBtn;
     private Bitmap ditheredBitmap;
@@ -73,6 +75,7 @@ public class MainActivity extends AppCompatActivity {
                     ditheredBitmap = applyFloydSteinbergDithering(originalBitmap);
                     runOnUiThread(() -> {
                         ditheredImageView.setImageBitmap(ditheredBitmap);
+
                         originalBitmap.recycle();
                     });
                 }).start();
@@ -115,10 +118,15 @@ public class MainActivity extends AppCompatActivity {
                 diffuseError(pixels, x - 1, y + 1, width, height, errR, errG, errB, 3.0f / 16);
                 diffuseError(pixels, x, y + 1, width, height, errR, errG, errB, 5.0f / 16);
                 diffuseError(pixels, x + 1, y + 1, width, height, errR, errG, errB, 1.0f / 16);
+
+//                Log.d("Dither", "Pixel (" + x + "," + y + ") " +
+//                        "Old: (" + oldR + "," + oldG + "," + oldB + ") → " +
+//                        "New: (" + newR + "," + newG + "," + newB + ")");
             }
         }
 
         ditheredBitmap.setPixels(pixels, 0, width, 0, 0, width, height);
+
         return ditheredBitmap;
     }
 
@@ -216,59 +224,129 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
-    private String convertToHex(Bitmap bitmap) {
-        StringBuilder sb = new StringBuilder();
-        String variableName = "dithered_image_" +
-                new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
+//    private String convertToHex(Bitmap bitmap) {
+//        StringBuilder sb = new StringBuilder();
+//        String variableName = "dithered_image_" +
+//                new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
+//
+//        sb.append("const unsigned char ").append(variableName).append("[] = {\n");
+//
+//        int width = bitmap.getWidth();
+//        int height = bitmap.getHeight();
+//        int[] pixels = new int[width * height];
+//        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
+//
+//        int count = 0;
+//        for (int y = 0; y < height; y++) {
+//            for (int x = 0; x < width; x += 2) { // Process 2 pixels at a time
+//                if (count > 0 && count % 16 == 0) {
+//                    sb.append("\n");
+//                }
+//
+//                // Get first pixel
+//                Color pixel1 = Color.valueOf(pixels[y * width + x]);
+//                String colorCode1 = getColorCode(pixel1);
+//
+//                // Get second pixel (or default to black if odd width)
+//                String colorCode2 = "0000";
+//                if (x + 1 < width) {
+//                    Color pixel2 = Color.valueOf(pixels[y * width + x + 1]);
+//                    colorCode2 = getColorCode(pixel2);
+//                }
+//
+//                // Combine two 4-bit color codes into one byte
+//                String combined = colorCode1 + colorCode2;
+//                String hexByte = binaryToHex(combined);
+//                sb.append(hexByte).append(", ");
+//                count++;
+//            }
+//        }
+//
+//        // Remove trailing comma and space
+//        if (sb.length() > 2) {
+//            sb.setLength(sb.length() - 2);
+//        }
+//
+//        sb.append("\n};");
+//        return sb.toString();
+//    }
+//
+//    private String getColorCode(Color color) {
+//        int r = (int)(color.red() * 255);
+//        int g = (int)(color.green() * 255);
+//        int b = (int)(color.blue() * 255);
+//
+//        // Match with the same palette used in C# code
+//        if (r == 255 && g == 255 && b == 255) return "0001"; // white
+//        if (r == 0 && g == 0 && b == 0) return "0000";       // black
+//        if (r == 255 && g == 0 && b == 0) return "0011";     // red
+//        if (r == 0 && g == 255 && b == 0) return "0110";     // green
+//        if (r == 0 && g == 0 && b == 255) return "0101";     // blue
+//        if (r == 255 && g == 255 && b == 0) return "0010";   // yellow
+//
+//        // Fallback to black if no match (shouldn't happen after dithering)
+//        throw new IllegalArgumentException(
+//                "Unrecognized color: R=" + r + ", G=" + g + ", B=" + b
+//        );
+//    }
+//
+//    private String binaryToHex(String binary) {
+//        int decimal = Integer.parseInt(binary, 2);
+////        return "0x" + Integer.toString(decimal, 16).toUpperCase();
+//        return String.format("0x%02X", decimal);
+//    }
+private String convertToHex(Bitmap bitmap) {
+    StringBuilder sb = new StringBuilder();
+    String variableName = "dithered_image_" +
+            new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
 
-        sb.append("const unsigned char ").append(variableName).append("[] = {\n");
+    int width = bitmap.getWidth();
+    int height = bitmap.getHeight();
+    int[] pixels = new int[width * height];
+    bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
 
-        int width = bitmap.getWidth();
-        int height = bitmap.getHeight();
-        int[] pixels = new int[width * height];
-        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
+    // Declare fixed-size array if needed (change 288000 to actual size if known)
+    int totalPixels = width * height;
+    int totalBytes = (totalPixels + 1) / 2;
+    sb.append("const unsigned char ").append(variableName)
+            .append("[").append(totalBytes).append("] = {\n");
 
-        int count = 0;
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x += 2) { // Process 2 pixels at a time
-                if (count > 0 && count % 16 == 0) {
-                    sb.append("\n");
-                }
-
-                // Get first pixel
-                Color pixel1 = Color.valueOf(pixels[y * width + x]);
-                String colorCode1 = getColorCode(pixel1);
-
-                // Get second pixel (or default to black if odd width)
-                String colorCode2 = "0000";
-                if (x + 1 < width) {
-                    Color pixel2 = Color.valueOf(pixels[y * width + x + 1]);
-                    colorCode2 = getColorCode(pixel2);
-                }
-
-                // Combine two 4-bit color codes into one byte
-                String combined = colorCode1 + colorCode2;
-                String hexByte = binaryToHex(combined);
-                sb.append(hexByte).append(", ");
-                count++;
-            }
+    int count = 0;
+    for (int i = 0; i < pixels.length; i += 2) {
+        String colorCode1 = getColorCodeApprox(Color.valueOf(pixels[i]));
+        String colorCode2 = "0000";
+        if (i + 1 < pixels.length) {
+            colorCode2 = getColorCodeApprox(Color.valueOf(pixels[i + 1]));
         }
 
-        // Remove trailing comma and space
-        if (sb.length() > 2) {
-            sb.setLength(sb.length() - 2);
-        }
+        String hexByte = binaryToHex(colorCode1 + colorCode2);
+        sb.append(hexByte).append(",");
 
-        sb.append("\n};");
-        return sb.toString();
+        count++;
+        if (count % 400 == 0) {
+            sb.append("\n");
+        }
     }
 
-    private String getColorCode(Color color) {
+    // Remove trailing comma
+    if (sb.charAt(sb.length() - 1) == ',') {
+        sb.setLength(sb.length() - 1);
+    }
+
+    sb.append("\n};");
+    return sb.toString();
+}
+
+    // Match colors with tolerance like the C# version
+    private String getColorCodeApprox(Color color) {
         int r = (int)(color.red() * 255);
         int g = (int)(color.green() * 255);
         int b = (int)(color.blue() * 255);
 
-        // Match with the same palette used in C# code
+        r = normalize(r);
+        g = normalize(g);
+        b = normalize(b);
+
         if (r == 255 && g == 255 && b == 255) return "0001"; // white
         if (r == 0 && g == 0 && b == 0) return "0000";       // black
         if (r == 255 && g == 0 && b == 0) return "0011";     // red
@@ -276,14 +354,21 @@ public class MainActivity extends AppCompatActivity {
         if (r == 0 && g == 0 && b == 255) return "0101";     // blue
         if (r == 255 && g == 255 && b == 0) return "0010";   // yellow
 
-        // Fallback to black if no match (shouldn't happen after dithering)
-        return "0000";
+        throw new IllegalArgumentException("Unrecognized color: R=" + r + ", G=" + g + ", B=" + b);
+    }
+
+    // Snap color channel to 0 or 255 based on tolerance
+    private int normalize(int value) {
+        if (value >= 245) return 255;
+        if (value <= 10) return 0;
+        return value;
     }
 
     private String binaryToHex(String binary) {
         int decimal = Integer.parseInt(binary, 2);
-        return "0x" + Integer.toString(decimal, 16).toUpperCase();
+        return String.format("0x%02X", decimal);
     }
+
 
     @Override
     protected void onDestroy() {
