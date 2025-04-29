@@ -3,6 +3,7 @@ package com.c3labs.ditherimage;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -69,10 +70,11 @@ public class MainActivity extends AppCompatActivity {
             Uri imageUri = data.getData();
             try {
                 Bitmap originalBitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), imageUri);
+                Bitmap rotatedBitmap = rotateBitmap(originalBitmap, -90);
                 originalImageView.setImageBitmap(originalBitmap);
 
                 new Thread(() -> {
-                    ditheredBitmap = applyFloydSteinbergDithering(originalBitmap);
+                    ditheredBitmap = applyFloydSteinbergDithering(rotatedBitmap);
                     runOnUiThread(() -> {
                         ditheredImageView.setImageBitmap(ditheredBitmap);
 
@@ -84,6 +86,12 @@ public class MainActivity extends AppCompatActivity {
                 e.printStackTrace();
             }
         }
+    }
+
+    private Bitmap rotateBitmap(Bitmap source, float angle) {
+        Matrix matrix = new Matrix();
+        matrix.postRotate(angle);
+        return Bitmap.createBitmap(source, 0, 0, source.getWidth(), source.getHeight(), matrix, true);
     }
 
     private Bitmap applyFloydSteinbergDithering(Bitmap original) {
