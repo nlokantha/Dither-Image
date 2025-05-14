@@ -9,8 +9,10 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Log;
+import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -29,6 +31,7 @@ public class MainActivity extends AppCompatActivity {
     private ImageView originalImageView, ditheredImageView;
     private Button selectImageBtn, saveImageBtn, saveHexBtn;
     private Bitmap ditheredBitmap;
+    private ProgressBar progressBar;
 
     // Color palette with consistent mapping to your C# code
     private final int[][] colorPalette = {
@@ -51,9 +54,13 @@ public class MainActivity extends AppCompatActivity {
         saveImageBtn = findViewById(R.id.buttonSave);
         saveHexBtn = findViewById(R.id.buttonSaveHex);
 
+        progressBar = findViewById(R.id.progressBar);
+
         selectImageBtn.setOnClickListener(v -> openGallery());
         saveImageBtn.setOnClickListener(v -> saveImage());
         saveHexBtn.setOnClickListener(v -> saveHexFile());
+
+        saveHexBtn.setVisibility(View.GONE);
     }
 
     private void openGallery() {
@@ -70,12 +77,17 @@ public class MainActivity extends AppCompatActivity {
             Uri imageUri = data.getData();
             try {
                 Bitmap originalBitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), imageUri);
+                if(originalBitmap.getWidth() != 1600 && originalBitmap.getHeight() != 1200){
+                    Toast.makeText(this, "Invalid Image", Toast.LENGTH_SHORT).show();
+                    return;
+                }
                 Bitmap rotatedBitmap = rotateBitmap(originalBitmap, -90);
                 originalImageView.setImageBitmap(originalBitmap);
 
                 new Thread(() -> {
                     ditheredBitmap = applyFloydSteinbergDithering(rotatedBitmap);
                     runOnUiThread(() -> {
+                        saveHexBtn.setVisibility(View.VISIBLE);
                         ditheredImageView.setImageBitmap(ditheredBitmap);
 
                         originalBitmap.recycle();
@@ -303,6 +315,7 @@ public class MainActivity extends AppCompatActivity {
 ////        return "0x" + Integer.toString(decimal, 16).toUpperCase();
 //        return String.format("0x%02X", decimal);
 //    }
+
 private String convertToHex(Bitmap bitmap) {
     StringBuilder sb = new StringBuilder();
     String variableName = "dithered_image_" +
@@ -319,6 +332,13 @@ private String convertToHex(Bitmap bitmap) {
     sb.append("const unsigned char ").append(variableName)
             .append("[").append(totalBytes).append("] = {\n");
 
+    // Show and configure progress bar
+    runOnUiThread(() -> {
+        progressBar.setVisibility(View.VISIBLE);
+        progressBar.setMax(totalBytes);
+        progressBar.setProgress(0);
+    });
+
     int count = 0;
     for (int i = 0; i < pixels.length; i += 2) {
         String colorCode1 = getColorCodeApprox(Color.valueOf(pixels[i]));
@@ -331,6 +351,12 @@ private String convertToHex(Bitmap bitmap) {
         sb.append(hexByte).append(",");
 
         count++;
+        int finalCount = count;
+        if (count % 10 == 0 || count == totalBytes) { // reduce frequency of UI updates
+            runOnUiThread(() -> progressBar.setProgress(finalCount));
+        }
+
+
         if (count % 400 == 0) {
             sb.append("\n");
         }
@@ -342,6 +368,10 @@ private String convertToHex(Bitmap bitmap) {
     }
 
     sb.append("\n};");
+
+    // Hide progress bar
+    runOnUiThread(() -> progressBar.setVisibility(View.GONE));
+
     return sb.toString();
 }
 
