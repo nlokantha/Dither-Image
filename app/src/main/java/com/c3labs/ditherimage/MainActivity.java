@@ -2,8 +2,12 @@ package com.c3labs.ditherimage;
 
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Matrix;
+import android.graphics.Paint;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -85,7 +89,13 @@ public class MainActivity extends AppCompatActivity {
                 originalImageView.setImageBitmap(originalBitmap);
 
                 new Thread(() -> {
-                    ditheredBitmap = applyFloydSteinbergDithering(rotatedBitmap);
+                    Bitmap contrasted = adjustContrast(rotatedBitmap, 1.2f);
+                    Bitmap saturatedImage = increaseSaturation(contrasted, 1.5f);
+//                    Bitmap whiteBalanced = adjustWhiteBalance(saturatedImage, 1.05f, 1.0f, 0.95f);
+//                    Bitmap shadowBoosted = adjustShadows(saturatedImage, 0.3f);
+//                    Bitmap blacksBalanced = adjustBlacks(saturatedImage, 0.0f);
+
+                    ditheredBitmap = applyFloydSteinbergDithering(saturatedImage);
                     runOnUiThread(() -> {
                         saveHexBtn.setVisibility(View.VISIBLE);
                         ditheredImageView.setImageBitmap(ditheredBitmap);
@@ -105,6 +115,123 @@ public class MainActivity extends AppCompatActivity {
         matrix.postRotate(angle);
         return Bitmap.createBitmap(source, 0, 0, source.getWidth(), source.getHeight(), matrix, true);
     }
+
+    private Bitmap increaseSaturation(Bitmap src, float amount) {
+        ColorMatrix colorMatrix = new ColorMatrix();
+        colorMatrix.setSaturation(amount); // >1 = more color; <1 = desaturate
+
+        ColorMatrixColorFilter filter = new ColorMatrixColorFilter(colorMatrix);
+        Bitmap result = Bitmap.createBitmap(src.getWidth(), src.getHeight(), Bitmap.Config.ARGB_8888);
+
+        Canvas canvas = new Canvas(result);
+        Paint paint = new Paint();
+        paint.setColorFilter(filter);
+        canvas.drawBitmap(src, 0, 0, paint);
+
+        return result;
+    }
+
+    private Bitmap adjustWhiteBalance(Bitmap src, float redGain, float greenGain, float blueGain) {
+        int width = src.getWidth();
+        int height = src.getHeight();
+        Bitmap result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int pixel = src.getPixel(x, y);
+
+                int r = clamp((int) (Color.red(pixel) * redGain));
+                int g = clamp((int) (Color.green(pixel) * greenGain));
+                int b = clamp((int) (Color.blue(pixel) * blueGain));
+
+                int newPixel = Color.rgb(r, g, b);
+                result.setPixel(x, y, newPixel);
+            }
+        }
+
+        return result;
+    }
+
+    private Bitmap adjustShadows(Bitmap src, float shadowBoost) {
+        int width = src.getWidth();
+        int height = src.getHeight();
+        Bitmap result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int pixel = src.getPixel(x, y);
+
+                int r = adjustShadowChannel(Color.red(pixel), shadowBoost);
+                int g = adjustShadowChannel(Color.green(pixel), shadowBoost);
+                int b = adjustShadowChannel(Color.blue(pixel), shadowBoost);
+
+                result.setPixel(x, y, Color.rgb(r, g, b));
+            }
+        }
+
+        return result;
+    }
+
+    private int adjustShadowChannel(int value, float boost) {
+        // Only apply boost to darker values (e.g., below 128)
+        if (value < 128) {
+            float factor = 1 + boost * (1 - (value / 128f));  // stronger boost on darker values
+            value = (int) (value * factor);
+        }
+        return clamp(value);
+    }
+
+    private Bitmap adjustContrast(Bitmap src, float contrast) {
+        // Formula: output = (input - 128) * contrast + 128
+        float scale = contrast;
+        float translate = 128 * (1 - contrast);
+
+        ColorMatrix colorMatrix = new ColorMatrix(new float[] {
+                scale, 0, 0, 0, translate,
+                0, scale, 0, 0, translate,
+                0, 0, scale, 0, translate,
+                0, 0, 0, 1, 0
+        });
+
+        ColorMatrixColorFilter filter = new ColorMatrixColorFilter(colorMatrix);
+        Bitmap result = Bitmap.createBitmap(src.getWidth(), src.getHeight(), Bitmap.Config.ARGB_8888);
+
+        Canvas canvas = new Canvas(result);
+        Paint paint = new Paint();
+        paint.setColorFilter(filter);
+        canvas.drawBitmap(src, 0, 0, paint);
+
+        return result;
+    }
+
+    private Bitmap adjustBlacks(Bitmap src, float blackLevel) {
+        int width = src.getWidth();
+        int height = src.getHeight();
+        Bitmap result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int pixel = src.getPixel(x, y);
+
+                int r = adjustBlackChannel(Color.red(pixel), blackLevel);
+                int g = adjustBlackChannel(Color.green(pixel), blackLevel);
+                int b = adjustBlackChannel(Color.blue(pixel), blackLevel);
+
+                result.setPixel(x, y, Color.rgb(r, g, b));
+            }
+        }
+
+        return result;
+    }
+
+    private int adjustBlackChannel(int value, float blackLevel) {
+        // blackLevel: 0.0 = no change, positive = deeper blacks
+        float adjusted = value * (1 - blackLevel);
+        return clamp((int) adjusted);
+    }
+
+
+
 
     private Bitmap applyFloydSteinbergDithering(Bitmap original) {
         int width = original.getWidth();
@@ -243,78 +370,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }).start();
     }
-
-//    private String convertToHex(Bitmap bitmap) {
-//        StringBuilder sb = new StringBuilder();
-//        String variableName = "dithered_image_" +
-//                new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
-//
-//        sb.append("const unsigned char ").append(variableName).append("[] = {\n");
-//
-//        int width = bitmap.getWidth();
-//        int height = bitmap.getHeight();
-//        int[] pixels = new int[width * height];
-//        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
-//
-//        int count = 0;
-//        for (int y = 0; y < height; y++) {
-//            for (int x = 0; x < width; x += 2) { // Process 2 pixels at a time
-//                if (count > 0 && count % 16 == 0) {
-//                    sb.append("\n");
-//                }
-//
-//                // Get first pixel
-//                Color pixel1 = Color.valueOf(pixels[y * width + x]);
-//                String colorCode1 = getColorCode(pixel1);
-//
-//                // Get second pixel (or default to black if odd width)
-//                String colorCode2 = "0000";
-//                if (x + 1 < width) {
-//                    Color pixel2 = Color.valueOf(pixels[y * width + x + 1]);
-//                    colorCode2 = getColorCode(pixel2);
-//                }
-//
-//                // Combine two 4-bit color codes into one byte
-//                String combined = colorCode1 + colorCode2;
-//                String hexByte = binaryToHex(combined);
-//                sb.append(hexByte).append(", ");
-//                count++;
-//            }
-//        }
-//
-//        // Remove trailing comma and space
-//        if (sb.length() > 2) {
-//            sb.setLength(sb.length() - 2);
-//        }
-//
-//        sb.append("\n};");
-//        return sb.toString();
-//    }
-//
-//    private String getColorCode(Color color) {
-//        int r = (int)(color.red() * 255);
-//        int g = (int)(color.green() * 255);
-//        int b = (int)(color.blue() * 255);
-//
-//        // Match with the same palette used in C# code
-//        if (r == 255 && g == 255 && b == 255) return "0001"; // white
-//        if (r == 0 && g == 0 && b == 0) return "0000";       // black
-//        if (r == 255 && g == 0 && b == 0) return "0011";     // red
-//        if (r == 0 && g == 255 && b == 0) return "0110";     // green
-//        if (r == 0 && g == 0 && b == 255) return "0101";     // blue
-//        if (r == 255 && g == 255 && b == 0) return "0010";   // yellow
-//
-//        // Fallback to black if no match (shouldn't happen after dithering)
-//        throw new IllegalArgumentException(
-//                "Unrecognized color: R=" + r + ", G=" + g + ", B=" + b
-//        );
-//    }
-//
-//    private String binaryToHex(String binary) {
-//        int decimal = Integer.parseInt(binary, 2);
-////        return "0x" + Integer.toString(decimal, 16).toUpperCase();
-//        return String.format("0x%02X", decimal);
-//    }
 
 private String convertToHex(Bitmap bitmap) {
     StringBuilder sb = new StringBuilder();
