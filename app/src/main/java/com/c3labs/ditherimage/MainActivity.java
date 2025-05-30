@@ -1,5 +1,6 @@
 package com.c3labs.ditherimage;
 
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -9,23 +10,37 @@ import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.net.Uri;
+import android.net.nsd.NsdManager;
+import android.net.nsd.NsdServiceInfo;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Log;
 import android.view.View;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.ListView;
 import android.widget.ProgressBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.net.HttpURLConnection;
+import java.net.InetAddress;
+import java.net.URL;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
@@ -36,6 +51,23 @@ public class MainActivity extends AppCompatActivity {
     private Button selectImageBtn, saveImageBtn, saveHexBtn;
     private Bitmap ditheredBitmap;
     private ProgressBar progressBar;
+
+    private static final String SERVICE_TYPE = "_http._tcp.";
+
+
+    private NsdManager nsdManager;
+    private NsdManager.DiscoveryListener discoveryListener;
+    private NsdManager.ResolveListener resolveListener;
+
+    private ListView deviceListView;
+    private Button scanButton;
+    private Button sendButton;
+    private TextView statusText;
+
+    private ArrayAdapter<String> deviceAdapter;
+    private ArrayList<String> deviceList;
+    private HashMap<String, ESP32Device> deviceMap;
+    private ESP32Device selectedDevice;
 
     // Color palette with consistent mapping to your C# code
     private final int[][] colorPalette = {
@@ -57,6 +89,7 @@ public class MainActivity extends AppCompatActivity {
         selectImageBtn = findViewById(R.id.select_image_btn);
         saveImageBtn = findViewById(R.id.buttonSave);
         saveHexBtn = findViewById(R.id.buttonSaveHex);
+        statusText = findViewById(R.id.statusText);
 
         progressBar = findViewById(R.id.progressBar);
 
@@ -65,6 +98,24 @@ public class MainActivity extends AppCompatActivity {
         saveHexBtn.setOnClickListener(v -> saveHexFile());
 
         saveHexBtn.setVisibility(View.GONE);
+
+        initViews();
+        initNSD();
+        setupListeners();
+    }
+
+    private void initViews() {
+        deviceListView = findViewById(R.id.deviceListView);
+        scanButton = findViewById(R.id.buttonScan);
+        sendButton = findViewById(R.id.buttonSend2);
+
+
+        deviceList = new ArrayList<>();
+        deviceMap = new HashMap<>();
+        deviceAdapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, deviceList);
+        deviceListView.setAdapter(deviceAdapter);
+
+        sendButton.setEnabled(false);
     }
 
     private void openGallery() {
@@ -89,11 +140,15 @@ public class MainActivity extends AppCompatActivity {
                 originalImageView.setImageBitmap(originalBitmap);
 
                 new Thread(() -> {
-                    Bitmap contrasted = adjustContrast(rotatedBitmap, 1.2f);
-                    Bitmap saturatedImage = increaseSaturation(contrasted, 1.5f);
-//                    Bitmap whiteBalanced = adjustWhiteBalance(saturatedImage, 1.05f, 1.0f, 0.95f);
+//                    Bitmap whiteBalanced = adjustWhiteBalance(rotatedBitmap, 0.95f, 1.0f, 2f);
+//                    Bitmap blacksBalanced = adjustBlacks(rotatedBitmap, 0.1f);
+                    Bitmap contrasted = adjustContrast(rotatedBitmap, 1.0f);
+                    Bitmap saturatedImage = increaseSaturation(contrasted, 1.8f);
+
+
+
 //                    Bitmap shadowBoosted = adjustShadows(saturatedImage, 0.3f);
-//                    Bitmap blacksBalanced = adjustBlacks(saturatedImage, 0.0f);
+//
 
                     ditheredBitmap = applyFloydSteinbergDithering(saturatedImage);
                     runOnUiThread(() -> {
@@ -261,10 +316,10 @@ public class MainActivity extends AppCompatActivity {
                 int errG = oldG - newG;
                 int errB = oldB - newB;
 
-                diffuseError(pixels, x + 1, y, width, height, errR, errG, errB, 7.0f / 16);
-                diffuseError(pixels, x - 1, y + 1, width, height, errR, errG, errB, 3.0f / 16);
-                diffuseError(pixels, x, y + 1, width, height, errR, errG, errB, 5.0f / 16);
-                diffuseError(pixels, x + 1, y + 1, width, height, errR, errG, errB, 1.0f / 16);
+                diffuseError(pixels, x + 1, y, width, height, errR, errG, errB, 7f / 16);
+                diffuseError(pixels, x - 1, y + 1, width, height, errR, errG, errB, 3f / 16);
+                diffuseError(pixels, x, y + 1, width, height, errR, errG, errB, 5f / 16);
+                diffuseError(pixels, x + 1, y + 1, width, height, errR, errG, errB, 1f / 16);
 
 //                Log.d("Dither", "Pixel (" + x + "," + y + ") " +
 //                        "Old: (" + oldR + "," + oldG + "," + oldB + ") → " +
@@ -462,6 +517,174 @@ private String convertToHex(Bitmap bitmap) {
         return String.format("0x%02X", decimal);
     }
 
+    private void initNSD() {
+        nsdManager = (NsdManager) getSystemService(Context.NSD_SERVICE);
+
+        discoveryListener = new NsdManager.DiscoveryListener() {
+            @Override
+            public void onStartDiscoveryFailed(String serviceType, int errorCode) {
+                Log.e(TAG, "Discovery failed: Error code:" + errorCode);
+                runOnUiThread(() -> statusText.setText("Discovery failed"));
+            }
+
+            @Override
+            public void onStopDiscoveryFailed(String serviceType, int errorCode) {
+                Log.e(TAG, "Stop discovery failed: Error code:" + errorCode);
+            }
+
+            @Override
+            public void onDiscoveryStarted(String serviceType) {
+                Log.d(TAG, "Service discovery started");
+                runOnUiThread(() -> statusText.setText("Scanning for ESP32 devices..."));
+            }
+
+            @Override
+            public void onDiscoveryStopped(String serviceType) {
+                Log.i(TAG, "Discovery stopped: " + serviceType);
+                runOnUiThread(() -> statusText.setText("Scan completed"));
+            }
+
+            @Override
+            public void onServiceFound(NsdServiceInfo service) {
+                Log.d(TAG, "Service discovery success: " + service);
+                if (service.getServiceType().equals(SERVICE_TYPE)) {
+                    nsdManager.resolveService(service, createResolveListener());
+                }
+            }
+
+            @Override
+            public void onServiceLost(NsdServiceInfo service) {
+                Log.e(TAG, "Service lost: " + service);
+                String serviceName = service.getServiceName();
+                runOnUiThread(() -> {
+                    deviceList.remove(serviceName);
+                    deviceMap.remove(serviceName);
+                    deviceAdapter.notifyDataSetChanged();
+                });
+            }
+        };
+    }
+
+    private NsdManager.ResolveListener createResolveListener() {
+        return new NsdManager.ResolveListener() {
+            @Override
+            public void onResolveFailed(NsdServiceInfo serviceInfo, int errorCode) {
+                Log.e(TAG, "Resolve failed: " + errorCode);
+            }
+
+            @Override
+            public void onServiceResolved(NsdServiceInfo serviceInfo) {
+                Log.i(TAG, "Resolve Succeeded: " + serviceInfo);
+
+                String serviceName = serviceInfo.getServiceName();
+                InetAddress host = serviceInfo.getHost();
+                int port = serviceInfo.getPort();
+
+                // Check if it's an ESP32 device
+//                if (serviceName.contains("ESP32") || serviceName.contains("esp32")) {
+                    ESP32Device device = new ESP32Device(serviceName, host.getHostAddress(), port);
+
+                    runOnUiThread(() -> {
+                        if (!deviceMap.containsKey(serviceName)) {
+                            deviceList.add(serviceName + " (" + host.getHostAddress() + ":" + port + ")");
+                            deviceMap.put(serviceName, device);
+                            deviceAdapter.notifyDataSetChanged();
+                        }
+                    });
+                }
+//            }
+        };
+    }
+
+    private void setupListeners() {
+        scanButton.setOnClickListener(v -> startDiscovery());
+
+        sendButton.setOnClickListener(v -> {
+            if (selectedDevice != null) {
+                sendDataToESP32("A");
+            }
+        });
+
+        deviceListView.setOnItemClickListener((parent, view, position, id) -> {
+            String selectedItem = deviceList.get(position);
+            String deviceName = selectedItem.split(" \\(")[0];
+            selectedDevice = deviceMap.get(deviceName);
+
+            sendButton.setEnabled(true);
+            statusText.setText("Selected: " + deviceName);
+            Toast.makeText(this, "Selected: " + deviceName, Toast.LENGTH_SHORT).show();
+        });
+    }
+
+    private void startDiscovery() {
+        deviceList.clear();
+        deviceMap.clear();
+        deviceAdapter.notifyDataSetChanged();
+        selectedDevice = null;
+        sendButton.setEnabled(false);
+
+        nsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener);
+    }
+
+    private void sendDataToESP32(String data) {
+        if (selectedDevice == null) return;
+
+        new SendDataTask().execute(selectedDevice, data);
+    }
+
+    private class SendDataTask extends AsyncTask<Object, Void, String> {
+        @Override
+        protected void onPreExecute() {
+            statusText.setText("Sending data...");
+        }
+
+        @Override
+        protected String doInBackground(Object... params) {
+            ESP32Device device = (ESP32Device) params[0];
+            String data = (String) params[1];
+
+            try {
+                URL url = new URL("http://" + device.getIpAddress() + ":" + device.getPort() + "/");
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("POST");
+                connection.setDoOutput(true);
+                connection.setConnectTimeout(5000);
+                connection.setReadTimeout(5000);
+
+                // Send data
+                OutputStreamWriter writer = new OutputStreamWriter(connection.getOutputStream());
+                writer.write(data);
+                writer.flush();
+                writer.close();
+
+                // Read response
+                BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                StringBuilder response = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    response.append(line).append("\n");
+                }
+                reader.close();
+
+                return "Success: " + response.toString();
+
+            } catch (IOException e) {
+                Log.e(TAG, "Error sending data", e);
+                return "Error: " + e.getMessage();
+            }
+        }
+
+        @Override
+        protected void onPostExecute(String result) {
+            statusText.setText(result);
+            if (result.startsWith("Success")) {
+                Toast.makeText(MainActivity.this, "Data sent successfully!", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(MainActivity.this, "Failed to send data", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
 
     @Override
     protected void onDestroy() {
@@ -469,5 +692,29 @@ private String convertToHex(Bitmap bitmap) {
         if (ditheredBitmap != null && !ditheredBitmap.isRecycled()) {
             ditheredBitmap.recycle();
         }
+        if (nsdManager != null) {
+            try {
+                nsdManager.stopServiceDiscovery(discoveryListener);
+            } catch (Exception e) {
+                Log.e(TAG, "Error stopping discovery", e);
+            }
+        }
+    }
+
+    // ESP32Device class
+    private static class ESP32Device {
+        private String name;
+        private String ipAddress;
+        private int port;
+
+        public ESP32Device(String name, String ipAddress, int port) {
+            this.name = name;
+            this.ipAddress = ipAddress;
+            this.port = port;
+        }
+
+        public String getName() { return name; }
+        public String getIpAddress() { return ipAddress; }
+        public int getPort() { return port; }
     }
 }
