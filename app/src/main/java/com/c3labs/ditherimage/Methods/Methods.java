@@ -47,9 +47,6 @@ public class Methods {
                 diffuseError(pixels, x, y + 1, width, height, errR, errG, errB, 5.0f / 16);
                 diffuseError(pixels, x + 1, y + 1, width, height, errR, errG, errB, 1.0f / 16);
 
-//                Log.d("Dither", "Pixel (" + x + "," + y + ") " +
-//                        "Old: (" + oldR + "," + oldG + "," + oldB + ") → " +
-//                        "New: (" + newR + "," + newG + "," + newB + ")");
             }
         }
 

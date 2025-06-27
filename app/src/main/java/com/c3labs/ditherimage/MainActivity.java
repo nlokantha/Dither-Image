@@ -64,10 +64,7 @@ public class MainActivity extends AppCompatActivity {
     private Button sendButton;
     private TextView statusText;
 
-    private ArrayAdapter<String> deviceAdapter;
-    private ArrayList<String> deviceList;
-    private HashMap<String, ESP32Device> deviceMap;
-    private ESP32Device selectedDevice;
+
 
     // Color palette with consistent mapping to your C# code
     private final int[][] colorPalette = {
@@ -95,13 +92,13 @@ public class MainActivity extends AppCompatActivity {
 
         selectImageBtn.setOnClickListener(v -> openGallery());
         saveImageBtn.setOnClickListener(v -> saveImage());
+//        saveHexBtn.setOnClickListener(v -> saveHexFile());
         saveHexBtn.setOnClickListener(v -> saveHexFile());
 
         saveHexBtn.setVisibility(View.GONE);
 
         initViews();
-        initNSD();
-        setupListeners();
+
     }
 
     private void initViews() {
@@ -109,11 +106,6 @@ public class MainActivity extends AppCompatActivity {
         scanButton = findViewById(R.id.buttonScan);
         sendButton = findViewById(R.id.buttonSend2);
 
-
-        deviceList = new ArrayList<>();
-        deviceMap = new HashMap<>();
-        deviceAdapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, deviceList);
-        deviceListView.setAdapter(deviceAdapter);
 
         sendButton.setEnabled(false);
     }
@@ -132,25 +124,29 @@ public class MainActivity extends AppCompatActivity {
             Uri imageUri = data.getData();
             try {
                 Bitmap originalBitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), imageUri);
-                if(originalBitmap.getWidth() != 1600 && originalBitmap.getHeight() != 1200){
-                    Toast.makeText(this, "Invalid Image", Toast.LENGTH_SHORT).show();
-                    return;
-                }
+//                if(originalBitmap.getWidth() != 1600 && originalBitmap.getHeight() != 1200){
+//                    Toast.makeText(this, "Invalid Image", Toast.LENGTH_SHORT).show();
+//                    return;
+//                }
                 Bitmap rotatedBitmap = rotateBitmap(originalBitmap, -90);
                 originalImageView.setImageBitmap(originalBitmap);
 
                 new Thread(() -> {
 //                    Bitmap whiteBalanced = adjustWhiteBalance(rotatedBitmap, 0.95f, 1.0f, 2f);
 //                    Bitmap blacksBalanced = adjustBlacks(rotatedBitmap, 0.1f);
-                    Bitmap contrasted = adjustContrast(rotatedBitmap, 1.0f);
-                    Bitmap saturatedImage = increaseSaturation(contrasted, 1.8f);
+//                    Bitmap saturatedImage = increaseSaturation(rotatedBitmap, 1.8f);
+//                    Bitmap contrasted = adjustContrast(saturatedImage, 1.2f);
+//                    Bitmap saturatedImage = increaseSaturation(rotatedBitmap, 1.5f);
+
+                    Bitmap boosted = boostColors(rotatedBitmap);
+
 
 
 
 //                    Bitmap shadowBoosted = adjustShadows(saturatedImage, 0.3f);
 //
 
-                    ditheredBitmap = applyFloydSteinbergDithering(saturatedImage);
+                    ditheredBitmap = applyFloydSteinbergDithering(boosted);
                     runOnUiThread(() -> {
                         saveHexBtn.setVisibility(View.VISIBLE);
                         ditheredImageView.setImageBitmap(ditheredBitmap);
@@ -186,55 +182,55 @@ public class MainActivity extends AppCompatActivity {
         return result;
     }
 
-    private Bitmap adjustWhiteBalance(Bitmap src, float redGain, float greenGain, float blueGain) {
-        int width = src.getWidth();
-        int height = src.getHeight();
-        Bitmap result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+//    private Bitmap adjustWhiteBalance(Bitmap src, float redGain, float greenGain, float blueGain) {
+//        int width = src.getWidth();
+//        int height = src.getHeight();
+//        Bitmap result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+//
+//        for (int y = 0; y < height; y++) {
+//            for (int x = 0; x < width; x++) {
+//                int pixel = src.getPixel(x, y);
+//
+//                int r = clamp((int) (Color.red(pixel) * redGain));
+//                int g = clamp((int) (Color.green(pixel) * greenGain));
+//                int b = clamp((int) (Color.blue(pixel) * blueGain));
+//
+//                int newPixel = Color.rgb(r, g, b);
+//                result.setPixel(x, y, newPixel);
+//            }
+//        }
+//
+//        return result;
+//    }
 
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int pixel = src.getPixel(x, y);
+//    private Bitmap adjustShadows(Bitmap src, float shadowBoost) {
+//        int width = src.getWidth();
+//        int height = src.getHeight();
+//        Bitmap result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+//
+//        for (int y = 0; y < height; y++) {
+//            for (int x = 0; x < width; x++) {
+//                int pixel = src.getPixel(x, y);
+//
+//                int r = adjustShadowChannel(Color.red(pixel), shadowBoost);
+//                int g = adjustShadowChannel(Color.green(pixel), shadowBoost);
+//                int b = adjustShadowChannel(Color.blue(pixel), shadowBoost);
+//
+//                result.setPixel(x, y, Color.rgb(r, g, b));
+//            }
+//        }
+//
+//        return result;
+//    }
 
-                int r = clamp((int) (Color.red(pixel) * redGain));
-                int g = clamp((int) (Color.green(pixel) * greenGain));
-                int b = clamp((int) (Color.blue(pixel) * blueGain));
-
-                int newPixel = Color.rgb(r, g, b);
-                result.setPixel(x, y, newPixel);
-            }
-        }
-
-        return result;
-    }
-
-    private Bitmap adjustShadows(Bitmap src, float shadowBoost) {
-        int width = src.getWidth();
-        int height = src.getHeight();
-        Bitmap result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int pixel = src.getPixel(x, y);
-
-                int r = adjustShadowChannel(Color.red(pixel), shadowBoost);
-                int g = adjustShadowChannel(Color.green(pixel), shadowBoost);
-                int b = adjustShadowChannel(Color.blue(pixel), shadowBoost);
-
-                result.setPixel(x, y, Color.rgb(r, g, b));
-            }
-        }
-
-        return result;
-    }
-
-    private int adjustShadowChannel(int value, float boost) {
-        // Only apply boost to darker values (e.g., below 128)
-        if (value < 128) {
-            float factor = 1 + boost * (1 - (value / 128f));  // stronger boost on darker values
-            value = (int) (value * factor);
-        }
-        return clamp(value);
-    }
+//    private int adjustShadowChannel(int value, float boost) {
+//        // Only apply boost to darker values (e.g., below 128)
+//        if (value < 128) {
+//            float factor = 1 + boost * (1 - (value / 128f));  // stronger boost on darker values
+//            value = (int) (value * factor);
+//        }
+//        return clamp(value);
+//    }
 
     private Bitmap adjustContrast(Bitmap src, float contrast) {
         // Formula: output = (input - 128) * contrast + 128
@@ -259,31 +255,253 @@ public class MainActivity extends AppCompatActivity {
         return result;
     }
 
-    private Bitmap adjustBlacks(Bitmap src, float blackLevel) {
-        int width = src.getWidth();
-        int height = src.getHeight();
-        Bitmap result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+//    private Bitmap adjustBlacks(Bitmap src, float blackLevel) {
+//        int width = src.getWidth();
+//        int height = src.getHeight();
+//        Bitmap result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+//
+//        for (int y = 0; y < height; y++) {
+//            for (int x = 0; x < width; x++) {
+//                int pixel = src.getPixel(x, y);
+//
+//                int r = adjustBlackChannel(Color.red(pixel), blackLevel);
+//                int g = adjustBlackChannel(Color.green(pixel), blackLevel);
+//                int b = adjustBlackChannel(Color.blue(pixel), blackLevel);
+//
+//                result.setPixel(x, y, Color.rgb(r, g, b));
+//            }
+//        }
+//
+//        return result;
+//    }
 
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int pixel = src.getPixel(x, y);
+//    private int adjustBlackChannel(int value, float blackLevel) {
+//        // blackLevel: 0.0 = no change, positive = deeper blacks
+//        float adjusted = value * (1 - blackLevel);
+//        return clamp((int) adjusted);
+//    }
+private Bitmap boostColors(Bitmap original) {
+    int width = original.getWidth();
+    int height = original.getHeight();
+    Bitmap boosted = original.copy(Bitmap.Config.ARGB_8888, true);
 
-                int r = adjustBlackChannel(Color.red(pixel), blackLevel);
-                int g = adjustBlackChannel(Color.green(pixel), blackLevel);
-                int b = adjustBlackChannel(Color.blue(pixel), blackLevel);
+    int[] pixels = new int[width * height];
+    boosted.getPixels(pixels, 0, width, 0, 0, width, height);
 
-                result.setPixel(x, y, Color.rgb(r, g, b));
-            }
+    for (int i = 0; i < pixels.length; i++) {
+        int r = Color.red(pixels[i]);
+        int g = Color.green(pixels[i]);
+        int b = Color.blue(pixels[i]);
+
+        // Boost green and blue components
+        if (b > g && b > r) { // If blue is dominant
+            b = Math.min(255, b + 30);
+        } else if (g > r && g > b) { // If green is dominant
+            g = Math.min(255, g + 30);
         }
 
-        return result;
+        pixels[i] = Color.rgb(r, g, b);
     }
 
-    private int adjustBlackChannel(int value, float blackLevel) {
-        // blackLevel: 0.0 = no change, positive = deeper blacks
-        float adjusted = value * (1 - blackLevel);
-        return clamp((int) adjusted);
+    boosted.setPixels(pixels, 0, width, 0, 0, width, height);
+    return boosted;
+}
+
+
+//    private Bitmap applyImprovedDithering(Bitmap original) {
+//        int width = original.getWidth();
+//        int height = original.getHeight();
+//        Bitmap ditheredBitmap = original.copy(Bitmap.Config.ARGB_8888, true);
+//
+//        int[] pixels = new int[width * height];
+//        ditheredBitmap.getPixels(pixels, 0, width, 0, 0, width, height);
+//
+//        for (int y = 0; y < height; y++) {
+//            for (int x = 0; x < width; x++) {
+//                int index = y * width + x;
+//                int oldPixel = pixels[index];
+//
+//                int oldR = Color.red(oldPixel);
+//                int oldG = Color.green(oldPixel);
+//                int oldB = Color.blue(oldPixel);
+//
+//                // Convert to YCbCr for perceptual matching
+//                float[] ycbcr = rgbToYCbCr(oldR, oldG, oldB);
+//
+//                // Find closest color using perceptual distance
+//                int[] closestColor = findClosestColorPerceptual(ycbcr[0], ycbcr[1], ycbcr[2]);
+//                int newR = closestColor[0];
+//                int newG = closestColor[1];
+//                int newB = closestColor[2];
+//
+//                pixels[index] = Color.rgb(newR, newG, newB);
+//
+//                // Calculate error in RGB space
+//                int errR = oldR - newR;
+//                int errG = oldG - newG;
+//                int errB = oldB - newB;
+//
+//                // Diffuse error in RGB space
+//                diffuseError(pixels, x + 1, y, width, height, errR, errG, errB, 7f / 16);
+//                diffuseError(pixels, x - 1, y + 1, width, height, errR, errG, errB, 3f / 16);
+//                diffuseError(pixels, x, y + 1, width, height, errR, errG, errB, 5f / 16);
+//                diffuseError(pixels, x + 1, y + 1, width, height, errR, errG, errB, 1f / 16);
+//            }
+//        }
+//
+//        ditheredBitmap.setPixels(pixels, 0, width, 0, 0, width, height);
+//        return ditheredBitmap;
+//    }
+//
+//    private int[] findClosestColorPerceptual(float y, float cb, float cr) {
+//        double minDist = Double.MAX_VALUE;
+//        int[] bestMatch = colorPalette[0];
+//
+//        // Adjusted weights - higher C_WEIGHT will emphasize color over brightness
+//        final float Y_WEIGHT = 0.3f;  // Luminance
+//        final float C_WEIGHT = 0.4f;  // Chrominance
+//
+//        for (int[] color : colorPalette) {
+//            float[] targetYCbCr = rgbToYCbCr(color[0], color[1], color[2]);
+//
+//            // Extra bias for green and blue
+//            double colorBias = 1.0;
+//            if (color == colorPalette[4]) { // blue
+//                colorBias = 0.6;  // Lower number = stronger preference
+//            } else if (color == colorPalette[5]) { // green
+//                colorBias = 0.7;
+//            }
+//
+//            double dist = colorBias * (
+//                    Y_WEIGHT * Math.abs(y - targetYCbCr[0]) +
+//                            C_WEIGHT * Math.abs(cb - targetYCbCr[1]) +
+//                            C_WEIGHT * Math.abs(cr - targetYCbCr[2]));
+//
+//            if (dist < minDist) {
+//                minDist = dist;
+//                bestMatch = color;
+//            }
+//        }
+//        return bestMatch;
+//    }
+//
+//    private void diffuseError(int[] pixels, int x, int y, int width, int height,
+//                              int errR, int errG, int errB, float factor) {
+//        if (x < 0 || x >= width || y < 0 || y >= height) return;
+//
+//        int index = y * width + x;
+//        int pixel = pixels[index];
+//
+//        int newR = clamp(Color.red(pixel) + (int)(errR * factor));
+//        int newG = clamp(Color.green(pixel) + (int)(errG * factor));
+//        int newB = clamp(Color.blue(pixel) + (int)(errB * factor));
+//
+//        pixels[index] = Color.rgb(newR, newG, newB);
+//    }
+
+
+
+
+//    private Bitmap applyImprovedDithering(Bitmap original) {
+//        int width = original.getWidth();
+//        int height = original.getHeight();
+//        Bitmap ditheredBitmap = original.copy(Bitmap.Config.ARGB_8888, true);
+//
+//        // Convert to YCbCr color space for better perceptual matching
+//        float[][] ycbcrPixels = convertToYCbCr(ditheredBitmap);
+//
+//        int[] pixels = new int[width * height];
+//        ditheredBitmap.getPixels(pixels, 0, width, 0, 0, width, height);
+//
+//        for (int y = 0; y < height; y++) {
+//            for (int x = 0; x < width; x++) {
+//                int index = y * width + x;
+//                int oldPixel = pixels[index];
+//
+//                float yVal = ycbcrPixels[index][0];
+//                float cbVal = ycbcrPixels[index][1];
+//                float crVal = ycbcrPixels[index][2];
+//
+//                // Find closest color in perceptual space
+//                int[] closestColor = findClosestColorPerceptual(yVal, cbVal, crVal);
+//                int newR = closestColor[0];
+//                int newG = closestColor[1];
+//                int newB = closestColor[2];
+//
+//                pixels[index] = Color.rgb(newR, newG, newB);
+//
+//                // Calculate error in YCbCr space
+//                float[] newYCbCr = rgbToYCbCr(newR, newG, newB);
+//                float errY = yVal - newYCbCr[0];
+//                float errCb = cbVal - newYCbCr[1];
+//                float errCr = crVal - newYCbCr[2];
+//
+//                // Diffuse error with adjusted weights
+//                diffuseErrorYCbCr(ycbcrPixels, x + 1, y, width, height, errY, errCb, errCr, 7f / 16);
+//                diffuseErrorYCbCr(ycbcrPixels, x - 1, y + 1, width, height, errY, errCb, errCr, 3f / 16);
+//                diffuseErrorYCbCr(ycbcrPixels, x, y + 1, width, height, errY, errCb, errCr, 5f / 16);
+//                diffuseErrorYCbCr(ycbcrPixels, x + 1, y + 1, width, height, errY, errCb, errCr, 1f / 16);
+//            }
+//        }
+//
+//        ditheredBitmap.setPixels(pixels, 0, width, 0, 0, width, height);
+//        return ditheredBitmap;
+//    }
+//
+//    private float[][] convertToYCbCr(Bitmap bitmap) {
+//        int width = bitmap.getWidth();
+//        int height = bitmap.getHeight();
+//        int[] pixels = new int[width * height];
+//        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
+//
+//        float[][] ycbcr = new float[width * height][3];
+//        for (int i = 0; i < pixels.length; i++) {
+//            int r = Color.red(pixels[i]);
+//            int g = Color.green(pixels[i]);
+//            int b = Color.blue(pixels[i]);
+//            ycbcr[i] = rgbToYCbCr(r, g, b);
+//        }
+//        return ycbcr;
+//    }
+//
+    private float[] rgbToYCbCr(int r, int g, int b) {
+        float y = 0.299f * r + 0.587f * g + 0.114f * b;
+        float cb = -0.1687f * r - 0.3313f * g + 0.5f * b + 128;
+        float cr = 0.5f * r - 0.4187f * g - 0.0813f * b + 128;
+        return new float[]{y, cb, cr};
     }
+//
+//    private int[] findClosestColorPerceptual(float y, float cb, float cr) {
+//        double minDist = Double.MAX_VALUE;
+//        int[] bestMatch = colorPalette[0];
+//
+//        for (int[] color : colorPalette) {
+//            float[] targetYCbCr = rgbToYCbCr(color[0], color[1], color[2]);
+//
+//            // Weighted distance in YCbCr space (more weight to luminance)
+//            double dist = 0.7 * Math.abs(y - targetYCbCr[0]) +
+//                    0.15 * Math.abs(cb - targetYCbCr[1]) +
+//                    0.15 * Math.abs(cr - targetYCbCr[2]);
+//
+//            if (dist < minDist) {
+//                minDist = dist;
+//                bestMatch = color;
+//            }
+//        }
+//        return bestMatch;
+//    }
+//
+//    private void diffuseErrorYCbCr(float[][] ycbcrPixels, int x, int y, int width, int height,
+//                                   float errY, float errCb, float errCr, float factor) {
+//        if (x < 0 || x >= width || y < 0 || y >= height) return;
+//
+//        int index = y * width + x;
+//        ycbcrPixels[index][0] += errY * factor;
+//        ycbcrPixels[index][1] += errCb * factor;
+//        ycbcrPixels[index][2] += errCr * factor;
+//    }
+
+
 
 
 
@@ -333,14 +551,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private int[] findClosestColor(int r, int g, int b) {
-        int minDist = Integer.MAX_VALUE;
+        double minDist = Integer.MAX_VALUE;
         int[] bestMatch = colorPalette[0];
 
         for (int[] color : colorPalette) {
             int dr = color[0] - r;
             int dg = color[1] - g;
             int db = color[2] - b;
-            int dist = dr * dr + dg * dg + db * db;
+            double dist = (dr * dr) + (dg * dg) + (db * db);
 
             if (dist < minDist) {
                 minDist = dist;
@@ -357,13 +575,13 @@ public class MainActivity extends AppCompatActivity {
         int index = y * width + x;
         int pixel = pixels[index];
 
-        int newR = clamp(Color.red(pixel) + (int)(errR * factor));
-        int newG = clamp(Color.green(pixel) + (int)(errG * factor));
-        int newB = clamp(Color.blue(pixel) + (int)(errB * factor));
+        int newR = clamp(Color.red(pixel) + (int)(errR * factor * 0.8));
+        int newG = clamp(Color.green(pixel) + (int)(errG * factor * 0.5));
+        int newB = clamp(Color.blue(pixel) + (int)(errB * factor * 0.2));
 
         pixels[index] = Color.rgb(newR, newG, newB);
     }
-
+//
     private int clamp(int value) {
         return Math.max(0, Math.min(255, value));
     }
@@ -426,7 +644,41 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
-private String convertToHex(Bitmap bitmap) {
+    private void saveBinFile() {
+        if (ditheredBitmap == null) {
+            Toast.makeText(this, "No image to convert", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        new Thread(() -> {
+            try {
+                byte[] binData = convertToBinary(ditheredBitmap); // changed here
+
+                File dir = new File(Environment.getExternalStoragePublicDirectory(
+                        Environment.DIRECTORY_DOCUMENTS), "Dithering App");
+                if (!dir.exists() && !dir.mkdirs()) {
+                    runOnUiThread(() -> Toast.makeText(this, "Failed to create directory", Toast.LENGTH_SHORT).show());
+                    return;
+                }
+
+                String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
+                File file = new File(dir, "Dithered_" + timeStamp + ".bin"); // .bin file
+
+                try (FileOutputStream out = new FileOutputStream(file)) {
+                    out.write(binData); // binary data
+                    runOnUiThread(() -> Toast.makeText(this,
+                            "Bin file saved to " + file.getAbsolutePath(), Toast.LENGTH_LONG).show());
+                }
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(this,
+                        "Error saving bin file: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+                e.printStackTrace();
+            }
+        }).start();
+    }
+
+
+    private String convertToHex(Bitmap bitmap) {
     StringBuilder sb = new StringBuilder();
     String variableName = "dithered_image_" +
             new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
@@ -485,6 +737,47 @@ private String convertToHex(Bitmap bitmap) {
     return sb.toString();
 }
 
+    private byte[] convertToBinary(Bitmap bitmap) {
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
+        int[] pixels = new int[width * height];
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
+
+        int totalPixels = width * height;
+        int totalBytes = (totalPixels + 1) / 2;
+
+        byte[] data = new byte[totalBytes];
+
+        runOnUiThread(() -> {
+            progressBar.setVisibility(View.VISIBLE);
+            progressBar.setMax(totalBytes);
+            progressBar.setProgress(0);
+        });
+
+        int count = 0;
+        for (int i = 0; i < pixels.length; i += 2) {
+            String colorCode1 = getColorCodeApprox(Color.valueOf(pixels[i]));
+            String colorCode2 = "0000";
+            if (i + 1 < pixels.length) {
+                colorCode2 = getColorCodeApprox(Color.valueOf(pixels[i + 1]));
+            }
+
+            String binaryString = colorCode1 + colorCode2;
+            int byteValue = Integer.parseInt(binaryString, 2);
+            data[count++] = (byte) byteValue;
+
+            int finalCount = count;
+            if (count % 10 == 0 || count == totalBytes) {
+                runOnUiThread(() -> progressBar.setProgress(finalCount));
+            }
+        }
+
+        runOnUiThread(() -> progressBar.setVisibility(View.GONE));
+
+        return data;
+    }
+
+
     // Match colors with tolerance like the C# version
     private String getColorCodeApprox(Color color) {
         int r = (int)(color.red() * 255);
@@ -517,173 +810,7 @@ private String convertToHex(Bitmap bitmap) {
         return String.format("0x%02X", decimal);
     }
 
-    private void initNSD() {
-        nsdManager = (NsdManager) getSystemService(Context.NSD_SERVICE);
 
-        discoveryListener = new NsdManager.DiscoveryListener() {
-            @Override
-            public void onStartDiscoveryFailed(String serviceType, int errorCode) {
-                Log.e(TAG, "Discovery failed: Error code:" + errorCode);
-                runOnUiThread(() -> statusText.setText("Discovery failed"));
-            }
-
-            @Override
-            public void onStopDiscoveryFailed(String serviceType, int errorCode) {
-                Log.e(TAG, "Stop discovery failed: Error code:" + errorCode);
-            }
-
-            @Override
-            public void onDiscoveryStarted(String serviceType) {
-                Log.d(TAG, "Service discovery started");
-                runOnUiThread(() -> statusText.setText("Scanning for ESP32 devices..."));
-            }
-
-            @Override
-            public void onDiscoveryStopped(String serviceType) {
-                Log.i(TAG, "Discovery stopped: " + serviceType);
-                runOnUiThread(() -> statusText.setText("Scan completed"));
-            }
-
-            @Override
-            public void onServiceFound(NsdServiceInfo service) {
-                Log.d(TAG, "Service discovery success: " + service);
-                if (service.getServiceType().equals(SERVICE_TYPE)) {
-                    nsdManager.resolveService(service, createResolveListener());
-                }
-            }
-
-            @Override
-            public void onServiceLost(NsdServiceInfo service) {
-                Log.e(TAG, "Service lost: " + service);
-                String serviceName = service.getServiceName();
-                runOnUiThread(() -> {
-                    deviceList.remove(serviceName);
-                    deviceMap.remove(serviceName);
-                    deviceAdapter.notifyDataSetChanged();
-                });
-            }
-        };
-    }
-
-    private NsdManager.ResolveListener createResolveListener() {
-        return new NsdManager.ResolveListener() {
-            @Override
-            public void onResolveFailed(NsdServiceInfo serviceInfo, int errorCode) {
-                Log.e(TAG, "Resolve failed: " + errorCode);
-            }
-
-            @Override
-            public void onServiceResolved(NsdServiceInfo serviceInfo) {
-                Log.i(TAG, "Resolve Succeeded: " + serviceInfo);
-
-                String serviceName = serviceInfo.getServiceName();
-                InetAddress host = serviceInfo.getHost();
-                int port = serviceInfo.getPort();
-
-                // Check if it's an ESP32 device
-//                if (serviceName.contains("ESP32") || serviceName.contains("esp32")) {
-                    ESP32Device device = new ESP32Device(serviceName, host.getHostAddress(), port);
-
-                    runOnUiThread(() -> {
-                        if (!deviceMap.containsKey(serviceName)) {
-                            deviceList.add(serviceName + " (" + host.getHostAddress() + ":" + port + ")");
-                            deviceMap.put(serviceName, device);
-                            deviceAdapter.notifyDataSetChanged();
-                        }
-                    });
-                }
-//            }
-        };
-    }
-
-    private void setupListeners() {
-        scanButton.setOnClickListener(v -> startDiscovery());
-
-        sendButton.setOnClickListener(v -> {
-            if (selectedDevice != null) {
-                sendDataToESP32("A");
-            }
-        });
-
-        deviceListView.setOnItemClickListener((parent, view, position, id) -> {
-            String selectedItem = deviceList.get(position);
-            String deviceName = selectedItem.split(" \\(")[0];
-            selectedDevice = deviceMap.get(deviceName);
-
-            sendButton.setEnabled(true);
-            statusText.setText("Selected: " + deviceName);
-            Toast.makeText(this, "Selected: " + deviceName, Toast.LENGTH_SHORT).show();
-        });
-    }
-
-    private void startDiscovery() {
-        deviceList.clear();
-        deviceMap.clear();
-        deviceAdapter.notifyDataSetChanged();
-        selectedDevice = null;
-        sendButton.setEnabled(false);
-
-        nsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener);
-    }
-
-    private void sendDataToESP32(String data) {
-        if (selectedDevice == null) return;
-
-        new SendDataTask().execute(selectedDevice, data);
-    }
-
-    private class SendDataTask extends AsyncTask<Object, Void, String> {
-        @Override
-        protected void onPreExecute() {
-            statusText.setText("Sending data...");
-        }
-
-        @Override
-        protected String doInBackground(Object... params) {
-            ESP32Device device = (ESP32Device) params[0];
-            String data = (String) params[1];
-
-            try {
-                URL url = new URL("http://" + device.getIpAddress() + ":" + device.getPort() + "/");
-                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                connection.setRequestMethod("POST");
-                connection.setDoOutput(true);
-                connection.setConnectTimeout(5000);
-                connection.setReadTimeout(5000);
-
-                // Send data
-                OutputStreamWriter writer = new OutputStreamWriter(connection.getOutputStream());
-                writer.write(data);
-                writer.flush();
-                writer.close();
-
-                // Read response
-                BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-                StringBuilder response = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    response.append(line).append("\n");
-                }
-                reader.close();
-
-                return "Success: " + response.toString();
-
-            } catch (IOException e) {
-                Log.e(TAG, "Error sending data", e);
-                return "Error: " + e.getMessage();
-            }
-        }
-
-        @Override
-        protected void onPostExecute(String result) {
-            statusText.setText(result);
-            if (result.startsWith("Success")) {
-                Toast.makeText(MainActivity.this, "Data sent successfully!", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(MainActivity.this, "Failed to send data", Toast.LENGTH_SHORT).show();
-            }
-        }
-    }
 
 
     @Override
@@ -692,29 +819,8 @@ private String convertToHex(Bitmap bitmap) {
         if (ditheredBitmap != null && !ditheredBitmap.isRecycled()) {
             ditheredBitmap.recycle();
         }
-        if (nsdManager != null) {
-            try {
-                nsdManager.stopServiceDiscovery(discoveryListener);
-            } catch (Exception e) {
-                Log.e(TAG, "Error stopping discovery", e);
-            }
-        }
+
     }
 
-    // ESP32Device class
-    private static class ESP32Device {
-        private String name;
-        private String ipAddress;
-        private int port;
 
-        public ESP32Device(String name, String ipAddress, int port) {
-            this.name = name;
-            this.ipAddress = ipAddress;
-            this.port = port;
-        }
-
-        public String getName() { return name; }
-        public String getIpAddress() { return ipAddress; }
-        public int getPort() { return port; }
-    }
 }
