@@ -54,11 +54,6 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String SERVICE_TYPE = "_http._tcp.";
 
-
-    private NsdManager nsdManager;
-    private NsdManager.DiscoveryListener discoveryListener;
-    private NsdManager.ResolveListener resolveListener;
-
     private ListView deviceListView;
     private Button scanButton;
     private Button sendButton;
@@ -66,14 +61,13 @@ public class MainActivity extends AppCompatActivity {
 
 
 
-    // Color palette with consistent mapping to your C# code
-    private final int[][] colorPalette = {
-            {255, 255, 255}, // white    -> 0001
-            {0, 0, 0},        // black    -> 0000
-            {255, 0, 0},      // red      -> 0011
-            {255, 255, 0},    // yellow   -> 0010
-            {0, 0, 255},      // blue     -> 0101
-            {0, 255, 0}      // green    -> 0110
+    private final int[][] PALETTE_BGR = {
+            {0x00, 0x00, 0x00},  // BLACK (index 0)
+            {0xFF, 0xFF, 0xFF},  // WHITE (index 1)
+            {0x00, 0xFF, 0xFF},  // YELLOW (index 2)
+            {0x00, 0x00, 0xFF},  // RED (index 3)
+            {0xFF, 0x00, 0x00},  // BLUE (index 4)
+            {0x00, 0xFF, 0x00}   // GREEN (index 5)
     };
 
     @Override
@@ -124,21 +118,26 @@ public class MainActivity extends AppCompatActivity {
             Uri imageUri = data.getData();
             try {
                 Bitmap originalBitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), imageUri);
-//                if(originalBitmap.getWidth() != 1600 && originalBitmap.getHeight() != 1200){
-//                    Toast.makeText(this, "Invalid Image", Toast.LENGTH_SHORT).show();
-//                    return;
-//                }
+                if(originalBitmap.getWidth() != 1600 && originalBitmap.getHeight() != 1200){
+                    Toast.makeText(this, "Invalid Image", Toast.LENGTH_SHORT).show();
+                    return;
+                }
                 Bitmap rotatedBitmap = rotateBitmap(originalBitmap, -90);
                 originalImageView.setImageBitmap(originalBitmap);
 
                 new Thread(() -> {
 //                    Bitmap whiteBalanced = adjustWhiteBalance(rotatedBitmap, 0.95f, 1.0f, 2f);
 //                    Bitmap blacksBalanced = adjustBlacks(rotatedBitmap, 0.1f);
-//                    Bitmap saturatedImage = increaseSaturation(rotatedBitmap, 1.8f);
-//                    Bitmap contrasted = adjustContrast(saturatedImage, 1.2f);
+//                    Bitmap saturatedImage = increaseSaturation(rotatedBitmap, 1.2f);
+//                    Bitmap contrasted = adjustContrast(rotatedBitmap, 1.2f);
 //                    Bitmap saturatedImage = increaseSaturation(rotatedBitmap, 1.5f);
 
-                    Bitmap boosted = boostColors(rotatedBitmap);
+//                    Bitmap boosted = boostColors(rotatedBitmap);
+//                    Bitmap blueEnhanced = enhanceBlues(boosted);
+//                    Bitmap contrasted = adjustContrast(boosted, 1.2f);
+                    ditheredBitmap = applyFloydSteinbergDithering(rotatedBitmap);
+
+//                    Bitmap boosted = boostColors(rotatedBitmap);
 
 
 
@@ -146,7 +145,7 @@ public class MainActivity extends AppCompatActivity {
 //                    Bitmap shadowBoosted = adjustShadows(saturatedImage, 0.3f);
 //
 
-                    ditheredBitmap = applyFloydSteinbergDithering(boosted);
+//                    ditheredBitmap = applyFloydSteinbergDithering(boosted);
                     runOnUiThread(() -> {
                         saveHexBtn.setVisibility(View.VISIBLE);
                         ditheredImageView.setImageBitmap(ditheredBitmap);
@@ -182,55 +181,7 @@ public class MainActivity extends AppCompatActivity {
         return result;
     }
 
-//    private Bitmap adjustWhiteBalance(Bitmap src, float redGain, float greenGain, float blueGain) {
-//        int width = src.getWidth();
-//        int height = src.getHeight();
-//        Bitmap result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
 //
-//        for (int y = 0; y < height; y++) {
-//            for (int x = 0; x < width; x++) {
-//                int pixel = src.getPixel(x, y);
-//
-//                int r = clamp((int) (Color.red(pixel) * redGain));
-//                int g = clamp((int) (Color.green(pixel) * greenGain));
-//                int b = clamp((int) (Color.blue(pixel) * blueGain));
-//
-//                int newPixel = Color.rgb(r, g, b);
-//                result.setPixel(x, y, newPixel);
-//            }
-//        }
-//
-//        return result;
-//    }
-
-//    private Bitmap adjustShadows(Bitmap src, float shadowBoost) {
-//        int width = src.getWidth();
-//        int height = src.getHeight();
-//        Bitmap result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-//
-//        for (int y = 0; y < height; y++) {
-//            for (int x = 0; x < width; x++) {
-//                int pixel = src.getPixel(x, y);
-//
-//                int r = adjustShadowChannel(Color.red(pixel), shadowBoost);
-//                int g = adjustShadowChannel(Color.green(pixel), shadowBoost);
-//                int b = adjustShadowChannel(Color.blue(pixel), shadowBoost);
-//
-//                result.setPixel(x, y, Color.rgb(r, g, b));
-//            }
-//        }
-//
-//        return result;
-//    }
-
-//    private int adjustShadowChannel(int value, float boost) {
-//        // Only apply boost to darker values (e.g., below 128)
-//        if (value < 128) {
-//            float factor = 1 + boost * (1 - (value / 128f));  // stronger boost on darker values
-//            value = (int) (value * factor);
-//        }
-//        return clamp(value);
-//    }
 
     private Bitmap adjustContrast(Bitmap src, float contrast) {
         // Formula: output = (input - 128) * contrast + 128
@@ -255,31 +206,53 @@ public class MainActivity extends AppCompatActivity {
         return result;
     }
 
-//    private Bitmap adjustBlacks(Bitmap src, float blackLevel) {
-//        int width = src.getWidth();
-//        int height = src.getHeight();
-//        Bitmap result = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+//private Bitmap boostColors(Bitmap original) {
+//    int width = original.getWidth();
+//    int height = original.getHeight();
+//    Bitmap boosted = original.copy(Bitmap.Config.ARGB_8888, true);
 //
-//        for (int y = 0; y < height; y++) {
-//            for (int x = 0; x < width; x++) {
-//                int pixel = src.getPixel(x, y);
+//    int[] pixels = new int[width * height];
+//    boosted.getPixels(pixels, 0, width, 0, 0, width, height);
 //
-//                int r = adjustBlackChannel(Color.red(pixel), blackLevel);
-//                int g = adjustBlackChannel(Color.green(pixel), blackLevel);
-//                int b = adjustBlackChannel(Color.blue(pixel), blackLevel);
+//    // Enhanced color boosting that preserves relationships
+//    for (int i = 0; i < pixels.length; i++) {
+//        int r = Color.red(pixels[i]);
+//        int g = Color.green(pixels[i]);
+//        int b = Color.blue(pixels[i]);
 //
-//                result.setPixel(x, y, Color.rgb(r, g, b));
-//            }
+//        // Calculate colorfulness (distance from gray)
+//        float max = Math.max(r, Math.max(g, b));
+//        float min = Math.min(r, Math.min(g, b));
+//        float delta = max - min;
+//        float lightness = (max + min) / 2f;
+//
+//        // Boost colors that aren't already saturated
+//        if (delta < 100) {
+//            float boostFactor = 1.5f + (1 - delta/100f);
+//
+//            // Boost while preserving hue
+//            float avg = (r + g + b) / 3f;
+//            r = clamp((int)(avg + (r - avg) * boostFactor));
+//            g = clamp((int)(avg + (g - avg) * boostFactor));
+//            b = clamp((int)(avg + (b - avg) * boostFactor));
 //        }
 //
-//        return result;
+//        // Special handling for blues which often appear dark
+//        if (b > r * 1.2 && b > g * 1.2 && b < 150) {
+//            b = clamp(b + 50);
+//        }
+//
+//        // Special handling for greens which often appear dark
+//        if (g > r * 1.2 && g > b * 1.2 && g < 150) {
+//            g = clamp(g + 50);
+//        }
+//
+//        pixels[i] = Color.rgb(r, g, b);
 //    }
-
-//    private int adjustBlackChannel(int value, float blackLevel) {
-//        // blackLevel: 0.0 = no change, positive = deeper blacks
-//        float adjusted = value * (1 - blackLevel);
-//        return clamp((int) adjusted);
-//    }
+//
+//    boosted.setPixels(pixels, 0, width, 0, 0, width, height);
+//    return boosted;
+//}
 private Bitmap boostColors(Bitmap original) {
     int width = original.getWidth();
     int height = original.getHeight();
@@ -293,11 +266,30 @@ private Bitmap boostColors(Bitmap original) {
         int g = Color.green(pixels[i]);
         int b = Color.blue(pixels[i]);
 
-        // Boost green and blue components
-        if (b > g && b > r) { // If blue is dominant
-            b = Math.min(255, b + 30);
-        } else if (g > r && g > b) { // If green is dominant
-            g = Math.min(255, g + 30);
+        // Calculate colorfulness
+        float max = Math.max(r, Math.max(g, b));
+        float min = Math.min(r, Math.min(g, b));
+        float delta = max - min;
+
+        // Special handling for greens
+        if (g > r && g > b) {  // If green is dominant
+            // Boost green more aggressively
+            float greenBoost = 1.8f;
+            g = clamp((int)(g * greenBoost));
+
+            // Reduce other channels to maintain hue
+            if (delta < 50) {
+                r = clamp((int)(r * 0.7f));
+                b = clamp((int)(b * 0.7f));
+            }
+        }
+        // Keep the rest of your boosting logic
+        else if (delta < 100) {
+            float boostFactor = 1.5f + (1 - delta/100f);
+            float avg = (r + g + b) / 3f;
+            r = clamp((int)(avg + (r - avg) * boostFactor));
+            g = clamp((int)(avg + (g - avg) * boostFactor));
+            b = clamp((int)(avg + (b - avg) * boostFactor));
         }
 
         pixels[i] = Color.rgb(r, g, b);
@@ -306,285 +298,153 @@ private Bitmap boostColors(Bitmap original) {
     boosted.setPixels(pixels, 0, width, 0, 0, width, height);
     return boosted;
 }
-
-
-//    private Bitmap applyImprovedDithering(Bitmap original) {
-//        int width = original.getWidth();
-//        int height = original.getHeight();
-//        Bitmap ditheredBitmap = original.copy(Bitmap.Config.ARGB_8888, true);
-//
-//        int[] pixels = new int[width * height];
-//        ditheredBitmap.getPixels(pixels, 0, width, 0, 0, width, height);
-//
-//        for (int y = 0; y < height; y++) {
-//            for (int x = 0; x < width; x++) {
-//                int index = y * width + x;
-//                int oldPixel = pixels[index];
-//
-//                int oldR = Color.red(oldPixel);
-//                int oldG = Color.green(oldPixel);
-//                int oldB = Color.blue(oldPixel);
-//
-//                // Convert to YCbCr for perceptual matching
-//                float[] ycbcr = rgbToYCbCr(oldR, oldG, oldB);
-//
-//                // Find closest color using perceptual distance
-//                int[] closestColor = findClosestColorPerceptual(ycbcr[0], ycbcr[1], ycbcr[2]);
-//                int newR = closestColor[0];
-//                int newG = closestColor[1];
-//                int newB = closestColor[2];
-//
-//                pixels[index] = Color.rgb(newR, newG, newB);
-//
-//                // Calculate error in RGB space
-//                int errR = oldR - newR;
-//                int errG = oldG - newG;
-//                int errB = oldB - newB;
-//
-//                // Diffuse error in RGB space
-//                diffuseError(pixels, x + 1, y, width, height, errR, errG, errB, 7f / 16);
-//                diffuseError(pixels, x - 1, y + 1, width, height, errR, errG, errB, 3f / 16);
-//                diffuseError(pixels, x, y + 1, width, height, errR, errG, errB, 5f / 16);
-//                diffuseError(pixels, x + 1, y + 1, width, height, errR, errG, errB, 1f / 16);
-//            }
-//        }
-//
-//        ditheredBitmap.setPixels(pixels, 0, width, 0, 0, width, height);
-//        return ditheredBitmap;
-//    }
-//
-//    private int[] findClosestColorPerceptual(float y, float cb, float cr) {
-//        double minDist = Double.MAX_VALUE;
-//        int[] bestMatch = colorPalette[0];
-//
-//        // Adjusted weights - higher C_WEIGHT will emphasize color over brightness
-//        final float Y_WEIGHT = 0.3f;  // Luminance
-//        final float C_WEIGHT = 0.4f;  // Chrominance
-//
-//        for (int[] color : colorPalette) {
-//            float[] targetYCbCr = rgbToYCbCr(color[0], color[1], color[2]);
-//
-//            // Extra bias for green and blue
-//            double colorBias = 1.0;
-//            if (color == colorPalette[4]) { // blue
-//                colorBias = 0.6;  // Lower number = stronger preference
-//            } else if (color == colorPalette[5]) { // green
-//                colorBias = 0.7;
-//            }
-//
-//            double dist = colorBias * (
-//                    Y_WEIGHT * Math.abs(y - targetYCbCr[0]) +
-//                            C_WEIGHT * Math.abs(cb - targetYCbCr[1]) +
-//                            C_WEIGHT * Math.abs(cr - targetYCbCr[2]));
-//
-//            if (dist < minDist) {
-//                minDist = dist;
-//                bestMatch = color;
-//            }
-//        }
-//        return bestMatch;
-//    }
-//
-//    private void diffuseError(int[] pixels, int x, int y, int width, int height,
-//                              int errR, int errG, int errB, float factor) {
-//        if (x < 0 || x >= width || y < 0 || y >= height) return;
-//
-//        int index = y * width + x;
-//        int pixel = pixels[index];
-//
-//        int newR = clamp(Color.red(pixel) + (int)(errR * factor));
-//        int newG = clamp(Color.green(pixel) + (int)(errG * factor));
-//        int newB = clamp(Color.blue(pixel) + (int)(errB * factor));
-//
-//        pixels[index] = Color.rgb(newR, newG, newB);
-//    }
-
-
-
-
-//    private Bitmap applyImprovedDithering(Bitmap original) {
-//        int width = original.getWidth();
-//        int height = original.getHeight();
-//        Bitmap ditheredBitmap = original.copy(Bitmap.Config.ARGB_8888, true);
-//
-//        // Convert to YCbCr color space for better perceptual matching
-//        float[][] ycbcrPixels = convertToYCbCr(ditheredBitmap);
-//
-//        int[] pixels = new int[width * height];
-//        ditheredBitmap.getPixels(pixels, 0, width, 0, 0, width, height);
-//
-//        for (int y = 0; y < height; y++) {
-//            for (int x = 0; x < width; x++) {
-//                int index = y * width + x;
-//                int oldPixel = pixels[index];
-//
-//                float yVal = ycbcrPixels[index][0];
-//                float cbVal = ycbcrPixels[index][1];
-//                float crVal = ycbcrPixels[index][2];
-//
-//                // Find closest color in perceptual space
-//                int[] closestColor = findClosestColorPerceptual(yVal, cbVal, crVal);
-//                int newR = closestColor[0];
-//                int newG = closestColor[1];
-//                int newB = closestColor[2];
-//
-//                pixels[index] = Color.rgb(newR, newG, newB);
-//
-//                // Calculate error in YCbCr space
-//                float[] newYCbCr = rgbToYCbCr(newR, newG, newB);
-//                float errY = yVal - newYCbCr[0];
-//                float errCb = cbVal - newYCbCr[1];
-//                float errCr = crVal - newYCbCr[2];
-//
-//                // Diffuse error with adjusted weights
-//                diffuseErrorYCbCr(ycbcrPixels, x + 1, y, width, height, errY, errCb, errCr, 7f / 16);
-//                diffuseErrorYCbCr(ycbcrPixels, x - 1, y + 1, width, height, errY, errCb, errCr, 3f / 16);
-//                diffuseErrorYCbCr(ycbcrPixels, x, y + 1, width, height, errY, errCb, errCr, 5f / 16);
-//                diffuseErrorYCbCr(ycbcrPixels, x + 1, y + 1, width, height, errY, errCb, errCr, 1f / 16);
-//            }
-//        }
-//
-//        ditheredBitmap.setPixels(pixels, 0, width, 0, 0, width, height);
-//        return ditheredBitmap;
-//    }
-//
-//    private float[][] convertToYCbCr(Bitmap bitmap) {
-//        int width = bitmap.getWidth();
-//        int height = bitmap.getHeight();
-//        int[] pixels = new int[width * height];
-//        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
-//
-//        float[][] ycbcr = new float[width * height][3];
-//        for (int i = 0; i < pixels.length; i++) {
-//            int r = Color.red(pixels[i]);
-//            int g = Color.green(pixels[i]);
-//            int b = Color.blue(pixels[i]);
-//            ycbcr[i] = rgbToYCbCr(r, g, b);
-//        }
-//        return ycbcr;
-//    }
-//
-    private float[] rgbToYCbCr(int r, int g, int b) {
-        float y = 0.299f * r + 0.587f * g + 0.114f * b;
-        float cb = -0.1687f * r - 0.3313f * g + 0.5f * b + 128;
-        float cr = 0.5f * r - 0.4187f * g - 0.0813f * b + 128;
-        return new float[]{y, cb, cr};
-    }
-//
-//    private int[] findClosestColorPerceptual(float y, float cb, float cr) {
-//        double minDist = Double.MAX_VALUE;
-//        int[] bestMatch = colorPalette[0];
-//
-//        for (int[] color : colorPalette) {
-//            float[] targetYCbCr = rgbToYCbCr(color[0], color[1], color[2]);
-//
-//            // Weighted distance in YCbCr space (more weight to luminance)
-//            double dist = 0.7 * Math.abs(y - targetYCbCr[0]) +
-//                    0.15 * Math.abs(cb - targetYCbCr[1]) +
-//                    0.15 * Math.abs(cr - targetYCbCr[2]);
-//
-//            if (dist < minDist) {
-//                minDist = dist;
-//                bestMatch = color;
-//            }
-//        }
-//        return bestMatch;
-//    }
-//
-//    private void diffuseErrorYCbCr(float[][] ycbcrPixels, int x, int y, int width, int height,
-//                                   float errY, float errCb, float errCr, float factor) {
-//        if (x < 0 || x >= width || y < 0 || y >= height) return;
-//
-//        int index = y * width + x;
-//        ycbcrPixels[index][0] += errY * factor;
-//        ycbcrPixels[index][1] += errCb * factor;
-//        ycbcrPixels[index][2] += errCr * factor;
-//    }
-
-
-
-
-
-
     private Bitmap applyFloydSteinbergDithering(Bitmap original) {
         int width = original.getWidth();
         int height = original.getHeight();
         Bitmap ditheredBitmap = original.copy(Bitmap.Config.ARGB_8888, true);
 
+        // Create line buffers (3 lines)
+        int[][][] lineBuffers = new int[3][width][3];
+
+        // Initialize first two lines
+        for (int y = 0; y < 2 && y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int pixel = original.getPixel(x, y);
+                lineBuffers[y][x][0] = Color.blue(pixel);  // B
+                lineBuffers[y][x][1] = Color.green(pixel); // G
+                lineBuffers[y][x][2] = Color.red(pixel);    // R (converted to BGR)
+            }
+        }
+
         int[] pixels = new int[width * height];
         ditheredBitmap.getPixels(pixels, 0, width, 0, 0, width, height);
 
         for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                int index = y * width + x;
-                int oldPixel = pixels[index];
-
-                int oldR = Color.red(oldPixel);
-                int oldG = Color.green(oldPixel);
-                int oldB = Color.blue(oldPixel);
-
-                int[] closestColor = findClosestColor(oldR, oldG, oldB);
-                int newR = closestColor[0];
-                int newG = closestColor[1];
-                int newB = closestColor[2];
-
-                pixels[index] = Color.rgb(newR, newG, newB);
-
-                int errR = oldR - newR;
-                int errG = oldG - newG;
-                int errB = oldB - newB;
-
-                diffuseError(pixels, x + 1, y, width, height, errR, errG, errB, 7f / 16);
-                diffuseError(pixels, x - 1, y + 1, width, height, errR, errG, errB, 3f / 16);
-                diffuseError(pixels, x, y + 1, width, height, errR, errG, errB, 5f / 16);
-                diffuseError(pixels, x + 1, y + 1, width, height, errR, errG, errB, 1f / 16);
-
-//                Log.d("Dither", "Pixel (" + x + "," + y + ") " +
-//                        "Old: (" + oldR + "," + oldG + "," + oldB + ") → " +
-//                        "New: (" + newR + "," + newG + "," + newB + ")");
+            // Read next line if available
+            if (y + 2 < height) {
+                for (int x = 0; x < width; x++) {
+                    int pixel = original.getPixel(x, y+2);
+                    lineBuffers[2][x][0] = Color.blue(pixel);
+                    lineBuffers[2][x][1] = Color.green(pixel);
+                    lineBuffers[2][x][2] = Color.red(pixel);
+                }
             }
+
+            // Process current line
+            for (int x = 0; x < width; x++) {
+                int[] pixel = lineBuffers[0][x];
+                byte index = findNearestColor(pixel);
+
+                // Store the palette color in output bitmap
+                pixels[y * width + x] = Color.rgb(
+                        PALETTE_BGR[index][2], // R
+                        PALETTE_BGR[index][1], // G
+                        PALETTE_BGR[index][0]  // B
+                );
+
+                // Calculate error for each channel
+                for (int c = 0; c < 3; c++) {
+                    int error = pixel[c] - PALETTE_BGR[index][c];
+                    spreadError(lineBuffers, x, y, c, error, width, height);
+                }
+            }
+
+            // Shift line buffers up
+            System.arraycopy(lineBuffers[1], 0, lineBuffers[0], 0, width);
+            System.arraycopy(lineBuffers[2], 0, lineBuffers[1], 0, width);
         }
 
         ditheredBitmap.setPixels(pixels, 0, width, 0, 0, width, height);
-
         return ditheredBitmap;
     }
 
-    private int[] findClosestColor(int r, int g, int b) {
-        double minDist = Integer.MAX_VALUE;
-        int[] bestMatch = colorPalette[0];
-
-        for (int[] color : colorPalette) {
-            int dr = color[0] - r;
-            int dg = color[1] - g;
-            int db = color[2] - b;
-            double dist = (dr * dr) + (dg * dg) + (db * db);
-
-            if (dist < minDist) {
-                minDist = dist;
-                bestMatch = color;
+    private byte findNearestColor(int[] pixel) {
+        int minDistance = Integer.MAX_VALUE;
+        byte bestIndex = 0;
+        for (byte i = 0; i < PALETTE_BGR.length; i++) {
+            int bDiff = pixel[0] - PALETTE_BGR[i][0];
+            int gDiff = pixel[1] - PALETTE_BGR[i][1];
+            int rDiff = pixel[2] - PALETTE_BGR[i][2];
+            int distance = rDiff*rDiff + gDiff*gDiff + bDiff*bDiff;
+            if (distance < minDistance) {
+                minDistance = distance;
+                bestIndex = i;
             }
         }
-        return bestMatch;
+        return bestIndex;
     }
 
-    private void diffuseError(int[] pixels, int x, int y, int width, int height,
-                              int errR, int errG, int errB, float factor) {
-        if (x < 0 || x >= width || y < 0 || y >= height) return;
+    private void spreadError(int[][][] lineBuffers, int x, int y,
+                             int channel, int error, int width, int height) {
+        // Current line (right neighbors)
+        if (x + 1 < width) {
+            lineBuffers[0][x+1][channel] = clamp(lineBuffers[0][x+1][channel] + (error * 8) / 42);
+        }
+        if (x + 2 < width) {
+            lineBuffers[0][x+2][channel] = clamp(lineBuffers[0][x+2][channel] + (error * 4) / 42);
+        }
 
-        int index = y * width + x;
-        int pixel = pixels[index];
+        // Next line
+        if (y + 1 < height) {
+            if (x > 1) {
+                lineBuffers[1][x-2][channel] = clamp(lineBuffers[1][x-2][channel] + (error * 2) / 42);
+            }
+            if (x > 0) {
+                lineBuffers[1][x-1][channel] = clamp(lineBuffers[1][x-1][channel] + (error * 4) / 42);
+            }
+            lineBuffers[1][x][channel] = clamp(lineBuffers[1][x][channel] + (error * 8) / 42);
+            if (x + 1 < width) {
+                lineBuffers[1][x+1][channel] = clamp(lineBuffers[1][x+1][channel] + (error * 4) / 42);
+            }
+            if (x + 2 < width) {
+                lineBuffers[1][x+2][channel] = clamp(lineBuffers[1][x+2][channel] + (error * 2) / 42);
+            }
+        }
 
-        int newR = clamp(Color.red(pixel) + (int)(errR * factor * 0.8));
-        int newG = clamp(Color.green(pixel) + (int)(errG * factor * 0.5));
-        int newB = clamp(Color.blue(pixel) + (int)(errB * factor * 0.2));
-
-        pixels[index] = Color.rgb(newR, newG, newB);
+        // Line after next
+        if (y + 2 < height) {
+            if (x > 1) {
+                lineBuffers[2][x-2][channel] = clamp(lineBuffers[2][x-2][channel] + error / 42);
+            }
+            if (x > 0) {
+                lineBuffers[2][x-1][channel] = clamp(lineBuffers[2][x-1][channel] + (error * 2) / 42);
+            }
+            lineBuffers[2][x][channel] = clamp(lineBuffers[2][x][channel] + (error * 4) / 42);
+            if (x + 1 < width) {
+                lineBuffers[2][x+1][channel] = clamp(lineBuffers[2][x+1][channel] + (error * 2) / 42);
+            }
+            if (x + 2 < width) {
+                lineBuffers[2][x+2][channel] = clamp(lineBuffers[2][x+2][channel] + error / 42);
+            }
+        }
     }
-//
+
     private int clamp(int value) {
         return Math.max(0, Math.min(255, value));
     }
+
+    // Update your convertToHex method to use the new palette indices
+    private String getColorCodeApprox(Color color) {
+        int r = (int)(color.red() * 255);
+        int g = (int)(color.green() * 255);
+        int b = (int)(color.blue() * 255);
+
+        // Convert to BGR for matching
+        int[] pixel = {b, g, r};
+        byte index = findNearestColor(pixel);
+
+        // Map to your existing binary codes
+        switch(index) {
+            case 0: return "0000"; // BLACK
+            case 1: return "0001"; // WHITE
+            case 2: return "0010"; // YELLOW
+            case 3: return "0011"; // RED
+            case 4: return "0101"; // BLUE
+            case 5: return "0110"; // GREEN
+            default: return "0000"; // fallback
+        }
+    }
+
 
     private void saveImage() {
         if (ditheredBitmap == null) {
@@ -644,38 +504,7 @@ private Bitmap boostColors(Bitmap original) {
         }).start();
     }
 
-    private void saveBinFile() {
-        if (ditheredBitmap == null) {
-            Toast.makeText(this, "No image to convert", Toast.LENGTH_SHORT).show();
-            return;
-        }
 
-        new Thread(() -> {
-            try {
-                byte[] binData = convertToBinary(ditheredBitmap); // changed here
-
-                File dir = new File(Environment.getExternalStoragePublicDirectory(
-                        Environment.DIRECTORY_DOCUMENTS), "Dithering App");
-                if (!dir.exists() && !dir.mkdirs()) {
-                    runOnUiThread(() -> Toast.makeText(this, "Failed to create directory", Toast.LENGTH_SHORT).show());
-                    return;
-                }
-
-                String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
-                File file = new File(dir, "Dithered_" + timeStamp + ".bin"); // .bin file
-
-                try (FileOutputStream out = new FileOutputStream(file)) {
-                    out.write(binData); // binary data
-                    runOnUiThread(() -> Toast.makeText(this,
-                            "Bin file saved to " + file.getAbsolutePath(), Toast.LENGTH_LONG).show());
-                }
-            } catch (Exception e) {
-                runOnUiThread(() -> Toast.makeText(this,
-                        "Error saving bin file: " + e.getMessage(), Toast.LENGTH_SHORT).show());
-                e.printStackTrace();
-            }
-        }).start();
-    }
 
 
     private String convertToHex(Bitmap bitmap) {
@@ -736,68 +565,6 @@ private Bitmap boostColors(Bitmap original) {
 
     return sb.toString();
 }
-
-    private byte[] convertToBinary(Bitmap bitmap) {
-        int width = bitmap.getWidth();
-        int height = bitmap.getHeight();
-        int[] pixels = new int[width * height];
-        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
-
-        int totalPixels = width * height;
-        int totalBytes = (totalPixels + 1) / 2;
-
-        byte[] data = new byte[totalBytes];
-
-        runOnUiThread(() -> {
-            progressBar.setVisibility(View.VISIBLE);
-            progressBar.setMax(totalBytes);
-            progressBar.setProgress(0);
-        });
-
-        int count = 0;
-        for (int i = 0; i < pixels.length; i += 2) {
-            String colorCode1 = getColorCodeApprox(Color.valueOf(pixels[i]));
-            String colorCode2 = "0000";
-            if (i + 1 < pixels.length) {
-                colorCode2 = getColorCodeApprox(Color.valueOf(pixels[i + 1]));
-            }
-
-            String binaryString = colorCode1 + colorCode2;
-            int byteValue = Integer.parseInt(binaryString, 2);
-            data[count++] = (byte) byteValue;
-
-            int finalCount = count;
-            if (count % 10 == 0 || count == totalBytes) {
-                runOnUiThread(() -> progressBar.setProgress(finalCount));
-            }
-        }
-
-        runOnUiThread(() -> progressBar.setVisibility(View.GONE));
-
-        return data;
-    }
-
-
-    // Match colors with tolerance like the C# version
-    private String getColorCodeApprox(Color color) {
-        int r = (int)(color.red() * 255);
-        int g = (int)(color.green() * 255);
-        int b = (int)(color.blue() * 255);
-
-        r = normalize(r);
-        g = normalize(g);
-        b = normalize(b);
-
-        if (r == 255 && g == 255 && b == 255) return "0001"; // white
-        if (r == 0 && g == 0 && b == 0) return "0000";       // black
-        if (r == 255 && g == 0 && b == 0) return "0011";     // red
-        if (r == 0 && g == 255 && b == 0) return "0110";     // green
-        if (r == 0 && g == 0 && b == 255) return "0101";     // blue
-        if (r == 255 && g == 255 && b == 0) return "0010";   // yellow
-
-        throw new IllegalArgumentException("Unrecognized color: R=" + r + ", G=" + g + ", B=" + b);
-    }
-
     // Snap color channel to 0 or 255 based on tolerance
     private int normalize(int value) {
         if (value >= 245) return 255;
